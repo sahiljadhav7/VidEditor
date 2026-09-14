@@ -50,12 +50,6 @@
           "savePhotosPermission": "Allow $(PRODUCT_NAME) to save your edited videos.",
           "granularPermissions": ["photo", "video"]
         }
-      ],
-      [
-        "@nikhil-cephei/ffmpeg-kit-react-native",
-        {
-          "subspec": "full-gpl"
-        }
       ]
     ],
     "experiments": {
