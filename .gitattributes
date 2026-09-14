@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.tgz binary
+*.aar binary
+*.png binary
+*.jpg binary
+*.ttf binary
+*.otf binary
+*.mp3 binary
+*.mp4 binary
+*.bat text eol=crlf

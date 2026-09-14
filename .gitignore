@@ -1,0 +1,50 @@
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+expo-env.d.ts
+
+# generated native projects (created by `npx expo prebuild`)
+/android/
+/ios/
+
+# build output
+dist/
+web-build/
+build/
+*.apk
+*.aab
+*.ipa
+coverage/
+.kotlin/
+.gradle/
+
+# Metro
+.metro-health-check*
+
+# signing material
+*.jks
+*.keystore
+!debug.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+*.orig.*
+
+# debug logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
