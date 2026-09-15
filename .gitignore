@@ -48,3 +48,13 @@ Thumbs.db
 
 # typescript
 *.tsbuildinfo
+
+# on-device review captures (personal footage; never commit)
+.impeccable/review/
+
+# vendored FFmpeg-kit binary, unused since ADR 0005
+vendor/ffmpeg-kit/*.tgz
+
+# local design tooling, not part of the app
+.claude/skills/impeccable/
+.claude/agents/
