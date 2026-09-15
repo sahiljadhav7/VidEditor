@@ -1,6 +1,5 @@
 import { Image } from 'expo-image';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { Button } from './Button';
 import { removeMediaRequest } from './confirmations';
@@ -17,8 +16,10 @@ const COLUMNS = 3;
 
 export function MediaSheet({ onAddFromGallery }: { onAddFromGallery: () => void }) {
   const { project, apply, askConfirm, showNotice, select, setSheet } = useEditor();
-  const [gridWidth, setGridWidth] = useState(0);
-  const tileSize = gridWidth > 0 ? (gridWidth - spacing.sm * (COLUMNS - 1)) / COLUMNS : 0;
+  // Sized from the window, not measured with onLayout. A measured grid is empty on the first layout
+  // pass, so the sheet was placed at its short height and the tiles then grew down under the nav bar.
+  const { width: windowWidth } = useWindowDimensions();
+  const tileSize = (windowWidth - spacing.lg * 2 - spacing.sm * (COLUMNS - 1)) / COLUMNS;
 
   const removeMedia = (assetId: string) => {
     const usage = assetUsage(project, assetId);
@@ -42,7 +43,7 @@ export function MediaSheet({ onAddFromGallery }: { onAddFromGallery: () => void 
           </Text>
         ) : (
           <ScrollView>
-            <View style={styles.grid} onLayout={(e) => setGridWidth(e.nativeEvent.layout.width)}>
+            <View style={styles.grid}>
               {project.assets.map((asset) => (
                 <AssetTile
                   key={asset.id}
@@ -106,6 +107,7 @@ function AssetTile({ asset, size, uses, onAdd, onRemove }: TileProps) {
 
 const styles = StyleSheet.create({
   body: {
+    flexShrink: 1,
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
   },
