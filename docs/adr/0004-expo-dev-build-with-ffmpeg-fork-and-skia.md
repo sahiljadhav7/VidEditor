@@ -1,3 +1,7 @@
+---
+status: accepted (the FFmpeg export part superseded by ADR 0005)
+---
+
 # React Native with an Expo development build; FFmpeg fork for export, Skia for preview
 
 The app is React Native with Expo, written in TypeScript throughout, and run as a **development build**. Expo Go can't be used, because it can't load the native modules the app needs.

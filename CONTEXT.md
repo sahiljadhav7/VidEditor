@@ -1,6 +1,6 @@
 # Video Editor
 
-A mobile video editor: the user brings in videos and photos, arranges them into a composition with text and music, and saves it to their device as a video file.
+A mobile video editor: the user brings in videos and photos, arranges them into a composition with text and music, and watches the finished edit full-screen. No video file leaves the app (ADR 0005).
 
 ## Language
 
@@ -21,7 +21,7 @@ _Avoid_: Draft, session, document
 ### Timeline
 
 **Composition**:
-The main track, its overlays and its music track, as one playable, exportable thing.
+The main track, its overlays and its music track, as one playable thing.
 _Avoid_: Video, sequence, edit
 
 **Main track**:
@@ -68,19 +68,15 @@ _Avoid_: Audio track, soundtrack, background music
 A named colour treatment applied to one clip at an adjustable intensity. A clip has at most one look; clips have none by default.
 _Avoid_: Filter (in code), preset, effect
 
-### Output
+### Playback
 
 **Compositor**:
 The thing that turns a composition at a given moment into a frame.
 _Avoid_: Renderer, player, engine
 
-**Export**:
-Producing a video file of the composition, with its audio, on the device.
-_Avoid_: Render (as a user-facing term), download
-
 **Preview**:
-Playing the composition inside the editor.
-_Avoid_: Playback screen
+Playing the composition, either in the player on the Editor screen or full-screen on the Preview screen at the end of the flow. No file is produced (ADR 0005).
+_Avoid_: Export, Save, Render, Playback screen
 
 ## UI labels
 
@@ -98,7 +94,7 @@ Code terms stay precise; the interface uses plain words. Never show a code term 
 | Song         | Song            |
 | Music track  | Music           |
 | Credit line  | Credits         |
-| Export       | Save            |
+| Preview      | Preview         |
 | Project      | *(not shown)*   |
 | Composition  | *(not shown)*   |
 | Compositor   | *(not shown)*   |

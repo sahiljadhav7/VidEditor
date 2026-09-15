@@ -1,3 +1,7 @@
+---
+status: accepted (export to the device superseded by ADR 0005)
+---
+
 # First-release scope, cut for a 48-hour take-home deadline
 
 This is a take-home assignment for Hoopr, an Indian music licensing platform, due 16 September 2026 at 5 PM IST. About 48 hours remained when the design interview stopped. Music is Hoopr's business, so a bundled music catalogue is in scope even though the original brief never mentioned audio. Several features that had already been designed are cut.

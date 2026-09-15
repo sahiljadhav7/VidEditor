@@ -48,7 +48,18 @@
         {
           "photosPermission": "Allow $(PRODUCT_NAME) to choose videos and photos to edit.",
           "savePhotosPermission": "Allow $(PRODUCT_NAME) to save your edited videos.",
-          "granularPermissions": ["photo", "video"]
+          "granularPermissions": [
+            "photo",
+            "video"
+          ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
         }
       ]
     ],
