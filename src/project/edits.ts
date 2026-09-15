@@ -4,7 +4,7 @@
  */
 
 import { createId } from './ids';
-import { clipAtTime } from './resolve';
+import { clipAtTime, resolve } from './resolve';
 import {
   FRAME,
   MIN_CLIP_DURATION,
@@ -153,10 +153,20 @@ export function setPhotoDuration(project: Project, clipId: string, duration: num
   };
 }
 
-/** Anchors a new overlay to the clip under `time`. Refused, with the project unchanged, when there are no clips. */
-export function addOverlayAt(project: Project, time: number): { project: Project; overlayId: string | null } {
-  const hit = clipAtTime(project, time);
-  if (!hit) return { project, overlayId: null };
+/**
+ * Adds text at `time`, backed off so it gets its full default duration: text added at the very end would
+ * otherwise last one frame and never show. If the whole composition is shorter than the default, the text
+ * starts at 0 and spans all of it. Refused, with the project unchanged, when there are no clips. `start` is
+ * where the text actually begins, so the editor can move the playhead onto it.
+ */
+export function addOverlayAt(
+  project: Project,
+  time: number,
+): { project: Project; overlayId: string | null; start: number } {
+  const total = resolve(project).duration;
+  const start = Math.max(0, Math.min(time, total - OVERLAY_DEFAULT_DURATION));
+  const hit = clipAtTime(project, start);
+  if (!hit) return { project, overlayId: null, start: time };
   const overlay: Overlay = {
     id: createId('text'),
     anchorClipId: hit.clip.id,
@@ -170,7 +180,10 @@ export function addOverlayAt(project: Project, time: number): { project: Project
     x: 0.5,
     y: 0.5,
   };
-  return { project: { ...project, overlays: [...project.overlays, overlay] }, overlayId: overlay.id };
+  const next = { ...project, overlays: [...project.overlays, overlay] };
+  // clipAtTime keeps the offset a frame inside the clip, so read the real start back rather than assume it.
+  const placed = resolve(next).overlays.find((o) => o.overlay.id === overlay.id);
+  return { project: next, overlayId: overlay.id, start: placed?.start ?? start };
 }
 
 export function updateOverlay(project: Project, overlayId: string, patch: OverlayPatch): Project {

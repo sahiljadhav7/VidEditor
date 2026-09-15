@@ -35,6 +35,8 @@ function MainTools() {
     const overlay = result.project.overlays.find((o) => o.id === result.overlayId);
     if (!overlay) return;
     apply(() => result.project);
+    // Near the end the text starts earlier than the playhead; move there so the new text is on screen.
+    time.set(result.start);
     startTextEditing(overlay);
   };
 
