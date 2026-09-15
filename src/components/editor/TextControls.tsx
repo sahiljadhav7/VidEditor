@@ -117,7 +117,12 @@ function Chip({
       onPress={onPress}
       hitSlop={4}
       style={[styles.chip, selected && styles.chipSelected]}>
-      <Text style={[typography.label, fontFamily ? { fontFamily, fontWeight: undefined } : null, { color: selected ? colors.accent : colors.text }]}>
+      <Text
+        style={[
+          typography.label,
+          fontFamily ? [{ fontFamily, fontWeight: undefined }, styles.chipFontLabel] : null,
+          { color: selected ? colors.accent : colors.text },
+        ]}>
         {label}
       </Text>
     </Pressable>
@@ -182,6 +187,11 @@ const styles = StyleSheet.create({
     borderWidth: stroke.selection,
     borderColor: colors.accent,
     backgroundColor: colors.accentSubtle,
+  },
+  // Android can measure a label in its own font family slightly narrower than it draws it, which
+  // clipped the last glyph ("Seri"). A little room on each side keeps the whole word.
+  chipFontLabel: {
+    paddingHorizontal: spacing.xxs,
   },
   swatchTarget: {
     width: touchTarget,

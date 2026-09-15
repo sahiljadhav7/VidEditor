@@ -41,7 +41,10 @@ export function overlayFontSize(size: OverlaySize, frameWidth: number): number {
   return Math.max(8, frameWidth * fraction);
 }
 
-/** A light box behind dark text, a dark box behind everything else. */
+/**
+ * A light box behind dark text, a dark box behind everything else. Opaque enough that the box reads over
+ * busy, bright footage; at 0.6 it looked like a faint tint rather than a background.
+ */
 export function overlayBoxColor(textColor: string): string {
-  return textColor === '#111111' ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.6)';
+  return textColor === '#111111' ? 'rgba(255, 255, 255, 0.92)' : 'rgba(0, 0, 0, 0.8)';
 }
