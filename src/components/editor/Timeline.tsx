@@ -406,9 +406,13 @@ function ClipSelection({ clip, pps, top, blocks }: { clip: ResolvedClip; pps: nu
   };
 
   // The project changes once, when the drag is released (ADR 0001).
+  // The handle must activate on touch-down. The timeline's scrub pan activates after 4px, and the
+  // cross-detector blocksExternalGesture relation doesn't hold it back on Android, so a handle with the
+  // default activation slop always lost the race and the drag scrubbed the timeline instead.
   const handlePan = (onDrag: (translationX: number) => void) =>
     Gesture.Pan()
       .runOnJS(true)
+      .minDistance(0)
       .hitSlop({ horizontal: 18 })
       .blocksExternalGesture(...blocks)
       .onUpdate((e) => onDrag(e.translationX))
