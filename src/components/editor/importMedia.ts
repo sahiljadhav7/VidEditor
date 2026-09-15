@@ -30,6 +30,20 @@ function toAsset(picked: ImagePicker.ImagePickerAsset): NewAsset | null {
   return { kind: 'photo', uri: picked.uri, width: picked.width, height: picked.height, duration: null, hasAudio: false, fileName };
 }
 
+/** Picker errors that mean the gallery itself never opened. */
+const GALLERY_LAUNCH_FAILURES = new Set([
+  'ERR_MISSING_ACTIVITY_TO_HANDLE_INTENT',
+  'ERR_REACT_CONTEXT_LOST',
+  'ERR_FAILED_TO_PICK_MEDIA',
+]);
+
+/**
+ * On Android the picker reads every picked file natively and rejects the whole pick on the first
+ * unreadable one (a corrupt video arrives as ERR_UNEXPECTED), so the good files in it are lost too.
+ * Skipping only the bad file needs a native patch to expo-image-picker; see README, Known limitations.
+ */
+const UNREADABLE_PICK = 'Couldn’t add these files. One of them can’t be read, so nothing was added. Pick again without it.';
+
 function rejectionMessage(names: (string | null)[]): string {
   if (names.length === 1) {
     return names[0] ? `Couldn’t add ${names[0]}. The file can’t be read.` : 'Couldn’t add one file. It can’t be read.';
@@ -51,8 +65,9 @@ export function useAddMedia() {
         orderedSelection: true,
         quality: 1,
       });
-    } catch {
-      showNotice('Couldn’t open your gallery. Try again.');
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      showNotice(GALLERY_LAUNCH_FAILURES.has(code ?? '') ? 'Couldn’t open your gallery. Try again.' : UNREADABLE_PICK);
       return;
     }
     if (result.canceled) return;
