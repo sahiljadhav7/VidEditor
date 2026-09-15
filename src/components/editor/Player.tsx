@@ -203,6 +203,13 @@ function VideoLayer({ clip, frame, volume }: { clip: ResolvedClip; frame: FrameR
     if (ready) video.get()?.setVolume(volume);
   }, [ready, volume, video]);
 
+  // The Skia surface keeps the size this layer mounted at; later player sizes are reached with a view
+  // transform. Resizing the surface loses a paused video frame on Android, and nothing decodes a new one
+  // until the playhead moves. Entering text mode briefly makes the player taller (the text controls
+  // replace the timeline before the keyboard padding arrives) and then shorter, so the surface must not
+  // follow the frame in either direction.
+  const [surface] = useState(() => ({ width: frame.width, height: frame.height }));
+
   const start = clip.start;
   const sourceStart = clip.sourceStart;
 
@@ -274,17 +281,26 @@ function VideoLayer({ clip, frame, volume }: { clip: ResolvedClip; frame: FrameR
       : undefined;
 
   const rotated = rotation === 90 || rotation === 270;
-  const drawWidth = rotated ? frame.height : frame.width;
-  const drawHeight = rotated ? frame.width : frame.height;
+  const drawWidth = rotated ? surface.height : surface.width;
+  const drawHeight = rotated ? surface.width : surface.height;
+  const scale = surface.width > 0 ? frame.width / surface.width : 1;
 
   return (
     <>
-      <Canvas style={StyleSheet.absoluteFill}>
-        <Group clip={rect(frame.x, frame.y, frame.width, frame.height)}>
+      <Canvas
+        style={{
+          position: 'absolute',
+          left: frame.x + frame.width / 2 - surface.width / 2,
+          top: frame.y + frame.height / 2 - surface.height / 2,
+          width: surface.width,
+          height: surface.height,
+          transform: [{ scale }],
+        }}>
+        <Group clip={rect(0, 0, surface.width, surface.height)}>
           <Group
             transform={[
-              { translateX: frame.x + frame.width / 2 },
-              { translateY: frame.y + frame.height / 2 },
+              { translateX: surface.width / 2 },
+              { translateY: surface.height / 2 },
               { rotate: (rotation * Math.PI) / 180 },
             ]}>
             <Image
