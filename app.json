@@ -61,7 +61,8 @@
             "minSdkVersion": 26
           }
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

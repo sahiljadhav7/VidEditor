@@ -1,8 +1,11 @@
+import { useAudioPlayer } from 'expo-audio';
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from './Button';
 import { useEditor } from './EditorProvider';
 import { Icon } from './Icon';
+import { IconButton } from './IconButton';
 import { Sheet } from './Sheet';
 import { Slider } from './Slider';
 import { SONGS, findSong } from '@/project/catalogue';
@@ -11,11 +14,31 @@ import { formatTimecode } from '@/project/format';
 import { colors, spacing, typography } from '@/theme';
 
 export function SongSheet() {
-  const { project, apply, setSheet } = useEditor();
+  const { project, apply, setSheet, pause } = useEditor();
   const current = findSong(project.music.songId);
 
+  // Listening is separate from the composition: its own player, from the top of the song.
+  const [listeningId, setListeningId] = useState<string | null>(null);
+  const listening = findSong(listeningId);
+  const audition = useAudioPlayer(listening ? listening.source : null);
+
+  useEffect(() => {
+    if (!listening) return;
+    // Nothing else should be playing while the creator is listening to a song.
+    pause();
+    audition.seekTo(0).then(() => audition.play()).catch(() => setListeningId(null));
+  }, [audition, listening, pause]);
+
+  // Leaving the sheet stops the audition rather than leaving it playing under the editor.
+  useEffect(() => () => setListeningId(null), []);
+
   return (
-    <Sheet title="Music" onClose={() => setSheet(null)}>
+    <Sheet
+      title="Music"
+      onClose={() => {
+        setListeningId(null);
+        setSheet(null);
+      }}>
       {SONGS.length === 0 ? (
         <View style={styles.empty}>
           <Icon name="library_music" size={32} color={colors.textSecondary} />
@@ -45,6 +68,11 @@ export function SongSheet() {
                   </Text>
                   <Text style={[typography.caption, styles.secondary]}>{song.creditLine}</Text>
                 </View>
+                <IconButton
+                  icon={song.id === listeningId ? 'stop' : 'play_arrow'}
+                  label={song.id === listeningId ? `Stop ${song.title}` : `Listen to ${song.title}`}
+                  onPress={() => setListeningId(song.id === listeningId ? null : song.id)}
+                />
                 {selected && <Icon name="check" color={colors.accent} />}
               </Pressable>
             );

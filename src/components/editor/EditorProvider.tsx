@@ -8,6 +8,7 @@ import {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { MusicTrack } from './MusicTrack';
 import { DEFAULT_PIXELS_PER_SECOND } from './timelineMetrics';
 import { emptyProject, removeOverlay, updateOverlay, type OverlayPatch } from '@/project/edits';
 import { resolve, type ResolvedComposition } from '@/project/resolve';
@@ -190,7 +191,13 @@ export function EditorProvider({ children }: { children: ReactNode }) {
     togglePlay,
   };
 
-  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
+  return (
+    <EditorContext.Provider value={value}>
+      {/* Inside the provider so the song follows the same clock on the Editor and on Preview. */}
+      <MusicTrack />
+      {children}
+    </EditorContext.Provider>
+  );
 }
 
 export function useEditor(): EditorContextValue {
