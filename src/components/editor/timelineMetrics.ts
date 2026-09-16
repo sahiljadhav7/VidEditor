@@ -19,9 +19,6 @@ export const DEFAULT_PIXELS_PER_SECOND = 48;
 export const MIN_PIXELS_PER_SECOND = 8;
 export const MAX_PIXELS_PER_SECOND = 320;
 
-/** The shortest a text can be dragged to on the timeline. */
-export const MIN_TEXT_DURATION = 0.5;
-
 export function laneLayout(textRows: number) {
   const clipTop = BAND_PADDING + RULER_HEIGHT + LANE_GAP;
   const textTop = clipTop + CLIP_LANE_HEIGHT + LANE_GAP;

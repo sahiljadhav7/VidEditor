@@ -6,6 +6,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { useEditor } from './EditorProvider';
 import { findSong } from '@/project/catalogue';
 import { MUSIC_FADE_OUT } from '@/project/rules';
+import { useLocalSong } from './useLocalSong';
 
 /**
  * How often the music is checked against the playhead. The editor's clock is the master: the
@@ -14,6 +15,14 @@ import { MUSIC_FADE_OUT } from '@/project/rules';
 const SYNC_INTERVAL_MS = 100;
 /** Re-seek the song once it is this far from where the playhead says it should be. */
 const DRIFT_TOLERANCE = 0.25;
+/**
+ * After a seek, drift isn't measured again for this long. A seek takes a moment to land (and in development
+ * each one is a new HTTP request to Metro), so checking sooner reads the old position and seeks again,
+ * flooding the connection until a request times out and the player errors.
+ */
+const SEEK_SETTLE_MS = 1000;
+/** How long to wait before reloading a song whose player has errored. */
+const RELOAD_AFTER_ERROR_MS = 2000;
 /** Below this, a volume change isn't worth a call across to the native player. */
 const VOLUME_EPSILON = 0.01;
 
@@ -23,15 +32,16 @@ function musicVolumeFor(balance: number) {
 }
 
 /**
- * The fade-out at the end of the composition. A composition shorter than the fade itself fades
- * across its whole length rather than starting part-way through at less than full volume.
+ * The fade-out at the end of the song's range. A range shorter than the fade itself fades across
+ * its whole length rather than starting part-way through at less than full volume.
  */
-function fadeFactorAt(time: number, duration: number) {
-  if (duration <= 0) return 0;
-  const fade = Math.min(MUSIC_FADE_OUT, duration);
-  const fadeStart = duration - fade;
+function fadeFactorAt(time: number, start: number, end: number) {
+  const length = end - start;
+  if (length <= 0) return 0;
+  const fade = Math.min(MUSIC_FADE_OUT, length);
+  const fadeStart = end - fade;
   if (time <= fadeStart) return 1;
-  return Math.max(0, (duration - time) / fade);
+  return Math.max(0, (end - time) / fade);
 }
 
 /**
@@ -46,15 +56,20 @@ function fadeFactorAt(time: number, duration: number) {
  * than the composition is simply cut short when the playhead reaches the end.
  */
 export function MusicTrack() {
-  const { project, resolved, time, playing, duration } = useEditor();
+  const { project, resolved, time, playing } = useEditor();
   const song = findSong(project.music.songId);
-  const player = useAudioPlayer(song ? song.source : null);
+  const localSong = useLocalSong(song);
+  const player = useAudioPlayer(localSong);
 
   const balance = project.music.balance;
   const hasMusic = resolved.music !== null;
+  const musicStart = resolved.music?.start ?? 0;
+  const musicEnd = resolved.music?.end ?? 0;
   /** Set whenever the song's position can no longer be trusted, so the next tick seeks. */
   const needsSeek = useRef(true);
   const lastVolume = useRef(-1);
+  const lastSeekAt = useRef(0);
+  const lastReloadAt = useRef(0);
 
   useEffect(() => {
     // A phone left on silent should still play the music the creator just chose.
@@ -79,16 +94,31 @@ export function MusicTrack() {
       return;
     }
 
-    const now = time.get();
-    const total = duration.get();
+    // An errored player never recovers by itself (a dropped connection leaves it silent for good), so reload it.
+    // Android reports the error only as an event, never in currentStatus; the player just drops back to idle.
+    const status = player.currentStatus;
+    if (localSong && (status.error || status.playbackState === 'idle')) {
+      const nowMs = Date.now();
+      if (nowMs - lastReloadAt.current > RELOAD_AFTER_ERROR_MS) {
+        lastReloadAt.current = nowMs;
+        player.replace(localSong);
+        player.loop = true;
+        lastVolume.current = -1;
+      }
+      needsSeek.current = true;
+      return;
+    }
 
-    const volume = musicVolumeFor(balance) * fadeFactorAt(now, total);
+    const now = time.get();
+
+    const volume = musicVolumeFor(balance) * fadeFactorAt(now, musicStart, musicEnd);
     if (Math.abs(volume - lastVolume.current) > VOLUME_EPSILON) {
       player.volume = volume;
       lastVolume.current = volume;
     }
 
-    if (!playing.get()) {
+    // Outside the song's range the playhead is in silence; re-entering it must find its place again.
+    if (!playing.get() || now < musicStart || now >= musicEnd) {
       if (player.playing) player.pause();
       // The playhead can move while paused (scrubbing), so the next play must find its place again.
       needsSeek.current = true;
@@ -97,11 +127,19 @@ export function MusicTrack() {
 
     // Where the playhead falls inside the song, given the player is looping it.
     const songLength = player.duration > 0 ? player.duration : song?.duration ?? 0;
-    const target = songLength > 0 ? now % songLength : now;
+    const intoSong = now - musicStart;
+    const target = songLength > 0 ? intoSong % songLength : intoSong;
+
+    // Nothing to line up until the song has loaded; the next tick tries again.
+    if (!player.isLoaded) {
+      needsSeek.current = true;
+      return;
+    }
 
     if (needsSeek.current) {
       // Play only once the song is in position, so it can't blurt out the old one first.
       needsSeek.current = false;
+      lastSeekAt.current = Date.now();
       player
         .seekTo(target)
         .then(() => {
@@ -118,14 +156,16 @@ export function MusicTrack() {
     // a small step rather than a whole song's worth of drift and provokes a seek every loop.
     const gap = Math.abs(player.currentTime - target);
     const drift = songLength > 0 ? Math.min(gap, songLength - gap) : gap;
-    if (drift > DRIFT_TOLERANCE) {
+    const settling = player.isBuffering || Date.now() - lastSeekAt.current < SEEK_SETTLE_MS;
+    if (drift > DRIFT_TOLERANCE && !settling) {
+      lastSeekAt.current = Date.now();
       player.seekTo(target).catch(() => {
         needsSeek.current = true;
       });
     }
 
     if (!player.playing) player.play();
-  }, [balance, duration, hasMusic, player, playing, song?.duration, time]);
+  }, [balance, hasMusic, localSong, musicEnd, musicStart, player, playing, song?.duration, time]);
 
   // Play and pause are followed at once, so the music doesn't lag the picture by up to a tick.
   useAnimatedReaction(

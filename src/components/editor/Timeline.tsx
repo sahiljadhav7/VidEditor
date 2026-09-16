@@ -20,7 +20,6 @@ import {
   MAX_TEXT_ROWS,
   MAX_TILES_PER_CLIP,
   MIN_PIXELS_PER_SECOND,
-  MIN_TEXT_DURATION,
   MUSIC_LANE_HEIGHT,
   RULER_HEIGHT,
   TEXT_ROW_HEIGHT,
@@ -29,9 +28,11 @@ import {
   rulerStep,
 } from './timelineMetrics';
 import { findSong } from '@/project/catalogue';
-import { moveClip, setPhotoDuration, setSourceRange, updateOverlay } from '@/project/edits';
+import { moveClip, setMusicRange, setOverlayRange, setPhotoDuration, setSourceRange } from '@/project/edits';
 import { formatLength, formatTimecode } from '@/project/format';
-import type { ResolvedClip, ResolvedOverlay } from '@/project/resolve';
+import { resolve, type ResolvedClip, type ResolvedOverlay } from '@/project/resolve';
+import { MUSIC_MIN_DURATION, OVERLAY_MIN_DURATION } from '@/project/rules';
+import type { Project } from '@/project/types';
 import { colors, radius, spacing, stroke, typography } from '@/theme';
 
 type Reorder = { clipId: string; x: number; target: number };
@@ -84,8 +85,9 @@ export function Timeline({ onAddMedia }: { onAddMedia: () => void }) {
       return;
     }
     if (y >= lanes.musicTop && y < lanes.musicTop + MUSIC_LANE_HEIGHT && t >= 0 && t <= resolved.duration) {
-      // Filled or empty, the music lane opens the song picker, where the song is changed or removed.
-      setSheet('music');
+      // With a song, a tap selects it so its ends can be dragged; an empty lane opens the song picker.
+      if (resolved.music) select({ kind: 'music' });
+      else setSheet('music');
       return;
     }
     select(null);
@@ -236,6 +238,9 @@ export function Timeline({ onAddMedia }: { onAddMedia: () => void }) {
                 blocks={blocks}
               />
             )}
+            {selection?.kind === 'music' && resolved.music && (
+              <MusicSelection music={resolved.music} pps={pps} top={lanes.musicTop} blocks={blocks} />
+            )}
             {reorder && (
               <View
                 pointerEvents="none"
@@ -344,25 +349,35 @@ function TextBar({ overlay, pps, top }: { overlay: ResolvedOverlay; pps: number;
 
 function MusicLane({ top, pps, centre }: { top: number; pps: number; centre: number }) {
   const { project, resolved, time, pixelsPerSecond } = useEditor();
-  const song = findSong(project.music.songId);
-  const width = Math.max(1, resolved.duration * pps);
+  const song = resolved.music ? findSong(project.music.songId) : undefined;
+  const laneWidth = Math.max(1, resolved.duration * pps);
+  const barStart = resolved.music?.start ?? 0;
+  const barWidth = resolved.music ? Math.max(1, (resolved.music.end - resolved.music.start) * pps) : laneWidth;
 
   // Keeps the label in view while the lane scrolls under the playhead.
   const labelStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateX: Math.max(0, Math.min(time.value * pixelsPerSecond.value - centre, width - 200)) },
+      {
+        translateX: Math.max(
+          0,
+          Math.min((time.value - barStart) * pixelsPerSecond.value - centre, barWidth - 200),
+        ),
+      },
     ],
   }));
 
   return (
-    <View pointerEvents="none" style={[styles.music, { top, width }]}>
-      <Animated.View style={[styles.musicLabel, labelStyle]}>
-        <Icon name={song ? 'graphic_eq' : 'music_note'} size={18} color={song ? colors.text : colors.textSecondary} />
-        <Text numberOfLines={1} style={[typography.label, { color: song ? colors.text : colors.textSecondary }]}>
-          {song ? `${song.title} · ${song.artist}` : 'Add music'}
-        </Text>
-      </Animated.View>
-    </View>
+    <>
+      {song && <View pointerEvents="none" style={[styles.musicEmpty, { top, width: laneWidth }]} />}
+      <View pointerEvents="none" style={[styles.music, { top, left: barStart * pps, width: barWidth }]}>
+        <Animated.View style={[styles.musicLabel, labelStyle]}>
+          <Icon name={song ? 'graphic_eq' : 'music_note'} size={18} color={song ? colors.text : colors.textSecondary} />
+          <Text numberOfLines={1} style={[typography.label, { color: song ? colors.text : colors.textSecondary }]}>
+            {song ? `${song.title} · ${song.artist}` : 'Add music'}
+          </Text>
+        </Animated.View>
+      </View>
+    </>
   );
 }
 
@@ -453,47 +468,121 @@ function ClipSelection({ clip, pps, top, blocks }: { clip: ResolvedClip; pps: nu
   );
 }
 
-function TextSelection({
-  overlay,
+type Range = { start: number; end: number };
+
+/**
+ * A selected text or song on the timeline, with a handle at each end. `edit` is the project edit for the
+ * new range; it clamps, so the draft is read back through it and the handles stop at the limits.
+ */
+function RangeSelection({
+  range,
   pps,
   top,
+  height,
+  label,
+  minLength,
+  edit,
+  readBack,
   blocks,
 }: {
-  overlay: ResolvedOverlay;
+  range: Range;
   pps: number;
   top: number;
+  height: number;
+  label: string;
+  minLength: number;
+  edit: (project: Project, start: number, end: number) => Project;
+  readBack: (project: Project) => Range | null;
   blocks: GestureType[];
 }) {
-  const { resolved, apply, pixelsPerSecond } = useEditor();
-  const [draftEnd, setDraftEnd] = useState<number | null>(null);
+  const { project, apply, pixelsPerSecond } = useEditor();
+  const [draft, setDraft] = useState<Range | null>(null);
   const commit = useRef<(() => void) | null>(null);
-  const end = draftEnd ?? overlay.end;
+  const { start, end } = draft ?? range;
 
-  const pan = Gesture.Pan()
-    .runOnJS(true)
-    .hitSlop({ horizontal: 20, vertical: 12 })
-    .blocksExternalGesture(...blocks)
-    .onUpdate((e) => {
-      const next = Math.max(MIN_TEXT_DURATION, overlay.overlay.duration + e.translationX / pixelsPerSecond.get());
-      setDraftEnd(Math.min(resolved.duration, overlay.start + next));
-      commit.current = () => apply((p) => updateOverlay(p, overlay.overlay.id, { duration: next }));
-    })
-    .onEnd(() => commit.current?.())
-    .onFinalize(() => {
-      commit.current = null;
-      setDraftEnd(null);
-    });
+  const drag = (side: 'start' | 'end', translationX: number) => {
+    const delta = translationX / pixelsPerSecond.get();
+    const asked =
+      side === 'start'
+        ? { start: Math.min(range.start + delta, range.end - minLength), end: range.end }
+        : { start: range.start, end: Math.max(range.end + delta, range.start + minLength) };
+    const next = readBack(edit(project, asked.start, asked.end));
+    if (!next) return;
+    setDraft(next);
+    commit.current = () => apply((p) => edit(p, next.start, next.end));
+  };
+
+  // Active on touch-down, like the clip handles: otherwise the timeline's scrub wins on Android.
+  const handlePan = (side: 'start' | 'end') =>
+    Gesture.Pan()
+      .runOnJS(true)
+      .minDistance(0)
+      .hitSlop({ horizontal: 18, vertical: 8 })
+      .blocksExternalGesture(...blocks)
+      .onUpdate((e) => drag(side, e.translationX))
+      .onEnd(() => commit.current?.())
+      .onFinalize(() => {
+        commit.current = null;
+        setDraft(null);
+      });
 
   return (
     <>
       <View
         pointerEvents="none"
-        style={[styles.textSelection, { top: top + 2, left: overlay.start * pps, width: Math.max(8, (end - overlay.start) * pps) }]}
+        style={[styles.rangeSelection, { top, height, left: start * pps, width: Math.max(stroke.selection * 2, (end - start) * pps) }]}
       />
-      <GestureDetector gesture={pan}>
-        <View accessibilityLabel="Text length" style={[styles.textHandle, { top: top + 2, left: end * pps }]} />
+      <GestureDetector gesture={handlePan('start')}>
+        <View
+          accessibilityLabel={`${label} start`}
+          style={[styles.handle, styles.handleStart, { top, height, left: start * pps - HANDLE_WIDTH }]}>
+          <View style={[styles.grip, { height: Math.min(16, height - 8) }]} />
+        </View>
       </GestureDetector>
+      <GestureDetector gesture={handlePan('end')}>
+        <View accessibilityLabel={`${label} end`} style={[styles.handle, styles.handleEnd, { top, height, left: end * pps }]}>
+          <View style={[styles.grip, { height: Math.min(16, height - 8) }]} />
+        </View>
+      </GestureDetector>
+      {draft && (
+        <View pointerEvents="none" style={[styles.lengthTag, { left: start * pps, top: top - 20 }]}>
+          <Text style={[typography.caption, { color: colors.onAccent }]}>{formatLength(end - start)}</Text>
+        </View>
+      )}
     </>
+  );
+}
+
+function TextSelection({ overlay, pps, top, blocks }: { overlay: ResolvedOverlay; pps: number; top: number; blocks: GestureType[] }) {
+  const id = overlay.overlay.id;
+  return (
+    <RangeSelection
+      range={overlay}
+      pps={pps}
+      top={top + 2}
+      height={TEXT_ROW_HEIGHT - 4}
+      label="Text"
+      minLength={OVERLAY_MIN_DURATION}
+      edit={(p, start, end) => setOverlayRange(p, id, start, end)}
+      readBack={(p) => resolve(p).overlays.find((o) => o.overlay.id === id) ?? null}
+      blocks={blocks}
+    />
+  );
+}
+
+function MusicSelection({ music, pps, top, blocks }: { music: Range; pps: number; top: number; blocks: GestureType[] }) {
+  return (
+    <RangeSelection
+      range={music}
+      pps={pps}
+      top={top}
+      height={MUSIC_LANE_HEIGHT}
+      label="Music"
+      minLength={MUSIC_MIN_DURATION}
+      edit={setMusicRange}
+      readBack={(p) => resolve(p).music}
+      blocks={blocks}
+    />
   );
 }
 
@@ -634,24 +723,23 @@ const styles = StyleSheet.create({
   textBarLabel: {
     flexShrink: 1,
   },
-  textSelection: {
+  rangeSelection: {
     position: 'absolute',
-    height: TEXT_ROW_HEIGHT - 4,
     borderWidth: stroke.selection,
     borderColor: colors.accent,
     borderRadius: radius.xs,
   },
-  textHandle: {
+  musicEmpty: {
     position: 'absolute',
-    width: 8,
-    height: TEXT_ROW_HEIGHT - 4,
-    backgroundColor: colors.accent,
-    borderTopRightRadius: radius.xs,
-    borderBottomRightRadius: radius.xs,
+    left: 0,
+    height: MUSIC_LANE_HEIGHT,
+    borderRadius: radius.xs,
+    borderWidth: stroke.hairline,
+    borderColor: colors.outlineStrong,
+    borderStyle: 'dashed',
   },
   music: {
     position: 'absolute',
-    left: 0,
     height: MUSIC_LANE_HEIGHT,
     borderRadius: radius.xs,
     backgroundColor: colors.surfaceRaised,

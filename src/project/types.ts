@@ -65,6 +65,10 @@ export type MusicSettings = {
   songId: string | null;
   /** 0 plays only the clips' own sound, 1 plays only the music. */
   balance: number;
+  /** Where the song begins, in composition time. The song plays from its own beginning here. */
+  start: number;
+  /** Where the song stops, in composition time. Null runs it to the end of the composition. */
+  end: number | null;
 };
 
 export type Project = {

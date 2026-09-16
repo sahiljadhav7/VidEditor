@@ -8,6 +8,7 @@ import { Icon } from './Icon';
 import { IconButton } from './IconButton';
 import { Sheet } from './Sheet';
 import { Slider } from './Slider';
+import { useLocalSong } from './useLocalSong';
 import { SONGS, findSong } from '@/project/catalogue';
 import { setBalance, setSong } from '@/project/edits';
 import { formatTimecode } from '@/project/format';
@@ -20,14 +21,15 @@ export function SongSheet() {
   // Listening is separate from the composition: its own player, from the top of the song.
   const [listeningId, setListeningId] = useState<string | null>(null);
   const listening = findSong(listeningId);
-  const audition = useAudioPlayer(listening ? listening.source : null);
+  const localListening = useLocalSong(listening);
+  const audition = useAudioPlayer(localListening);
 
   useEffect(() => {
-    if (!listening) return;
+    if (!listening || !localListening) return;
     // Nothing else should be playing while the creator is listening to a song.
     pause();
     audition.seekTo(0).then(() => audition.play()).catch(() => setListeningId(null));
-  }, [audition, listening, pause]);
+  }, [audition, listening, localListening, pause]);
 
   // Leaving the sheet stops the audition rather than leaving it playing under the editor.
   useEffect(() => () => setListeningId(null), []);

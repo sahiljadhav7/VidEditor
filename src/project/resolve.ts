@@ -3,7 +3,7 @@
  * Preview reads this, and nothing else.
  */
 
-import { FRAME, MUSIC_FADE_OUT } from './rules';
+import { FRAME, MUSIC_FADE_OUT, MUSIC_MIN_DURATION } from './rules';
 import type { Asset, Clip, Overlay, Project } from './types';
 
 export type ResolvedClip = {
@@ -74,13 +74,16 @@ export function resolve(project: Project): ResolvedComposition {
     return [{ overlay, start, end: Math.min(duration, start + overlay.duration) }];
   });
 
+  // A trimmed composition pulls the song's start back in rather than dropping the song.
+  const musicStart = Math.min(project.music.start, Math.max(0, duration - MUSIC_MIN_DURATION));
+  const musicEnd = Math.min(duration, project.music.end ?? duration);
   const music =
-    project.music.songId && duration > 0
+    project.music.songId && musicStart < musicEnd
       ? {
           songId: project.music.songId,
-          start: 0,
-          end: duration,
-          fadeOutStart: Math.max(0, duration - MUSIC_FADE_OUT),
+          start: musicStart,
+          end: musicEnd,
+          fadeOutStart: Math.max(musicStart, musicEnd - MUSIC_FADE_OUT),
           balance: project.music.balance,
         }
       : null;

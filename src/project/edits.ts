@@ -8,7 +8,9 @@ import { clipAtTime, resolve } from './resolve';
 import {
   FRAME,
   MIN_CLIP_DURATION,
+  MUSIC_MIN_DURATION,
   OVERLAY_DEFAULT_DURATION,
+  OVERLAY_MIN_DURATION,
   PHOTO_DEFAULT_DURATION,
   PHOTO_MAX_DURATION,
 } from './rules';
@@ -20,7 +22,7 @@ export type OverlayPatch = Partial<Omit<Overlay, 'id' | 'anchorClipId'>>;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export function emptyProject(): Project {
-  return { assets: [], clips: [], overlays: [], music: { songId: null, balance: 0.5 } };
+  return { assets: [], clips: [], overlays: [], music: { songId: null, balance: 0.5, start: 0, end: null } };
 }
 
 export function clipDuration(clip: Clip): number {
@@ -193,6 +195,29 @@ export function updateOverlay(project: Project, overlayId: string, patch: Overla
   };
 }
 
+/**
+ * Sets when a text starts and ends, in composition time. The text re-anchors to the clip under its new
+ * start, so it still travels with that footage when clips are trimmed or moved (ADR 0002).
+ */
+export function setOverlayRange(project: Project, overlayId: string, start: number, end: number): Project {
+  const resolved = resolve(project);
+  const total = resolved.duration;
+  if (!project.overlays.some((o) => o.id === overlayId) || total <= 0) return project;
+  const nextStart = clamp(start, 0, Math.max(0, total - OVERLAY_MIN_DURATION));
+  const nextEnd = clamp(end, nextStart + OVERLAY_MIN_DURATION, Math.max(total, nextStart + OVERLAY_MIN_DURATION));
+  const hit = clipAtTime(project, nextStart);
+  if (!hit) return project;
+  // clipAtTime can pull the start a frame back inside the clip, so measure the length from where it landed.
+  const clipStart = resolved.clips.find((c) => c.clip.id === hit.clip.id)?.start ?? 0;
+  const placedStart = clipStart + hit.offset;
+  return {
+    ...project,
+    overlays: project.overlays.map((o) =>
+      o.id === overlayId ? { ...o, anchorClipId: hit.clip.id, offset: hit.offset, duration: nextEnd - placedStart } : o,
+    ),
+  };
+}
+
 export function removeOverlay(project: Project, overlayId: string): Project {
   return { ...project, overlays: project.overlays.filter((o) => o.id !== overlayId) };
 }
@@ -206,7 +231,19 @@ export function setLook(project: Project, clipId: string, look: ClipLook | null)
 }
 
 export function setSong(project: Project, songId: string | null): Project {
-  return { ...project, music: { ...project.music, songId } };
+  // Removing the song forgets its range, so the next song covers the whole composition again.
+  const range = songId ? {} : { start: 0, end: null };
+  return { ...project, music: { ...project.music, songId, ...range } };
+}
+
+/** Sets when the song starts and stops, in composition time. An end at the composition's end stays there. */
+export function setMusicRange(project: Project, start: number, end: number): Project {
+  const total = resolve(project).duration;
+  if (total <= 0) return project;
+  const nextStart = clamp(start, 0, Math.max(0, total - MUSIC_MIN_DURATION));
+  const nextEnd = clamp(end, Math.min(total, nextStart + MUSIC_MIN_DURATION), total);
+  // Kept open-ended at the end, so adding clips later extends the music with them.
+  return { ...project, music: { ...project.music, start: nextStart, end: nextEnd >= total - FRAME ? null : nextEnd } };
 }
 
 export function setBalance(project: Project, balance: number): Project {

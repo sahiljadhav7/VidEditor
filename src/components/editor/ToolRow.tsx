@@ -5,12 +5,12 @@ import { deleteClipRequest } from './confirmations';
 import { useEditor } from './EditorProvider';
 import { Icon, type IconName } from './Icon';
 import { TOOL_ROW_HEIGHT } from './timelineMetrics';
-import { addOverlayAt, removeClip, removeOverlay, textsOnClip } from '@/project/edits';
+import { addOverlayAt, removeClip, removeOverlay, setSong, textsOnClip } from '@/project/edits';
 import { colors, radius, spacing, stroke, typography } from '@/theme';
 
 /**
  * The docked tool row. Its states are separate components so they can crossfade later.
- * Nothing selected: Media, Text, Music. A clip: Filter, Delete. A text: Edit, Delete.
+ * Nothing selected: Media, Text, Music. A clip: Filter, Delete. A text: Edit, Delete. Music: Change, Remove.
  */
 export function ToolRow() {
   const { selection, project } = useEditor();
@@ -18,10 +18,19 @@ export function ToolRow() {
 
   const clipSelected = selection?.kind === 'clip' && project.clips.some((c) => c.id === selection.id);
   const textSelected = selection?.kind === 'text' && project.overlays.some((o) => o.id === selection.id);
+  const musicSelected = selection?.kind === 'music' && project.music.songId !== null;
 
   return (
     <View style={[styles.row, { paddingBottom: insets.bottom }]}>
-      {clipSelected ? <ClipTools clipId={selection.id} /> : textSelected ? <TextTools textId={selection.id} /> : <MainTools />}
+      {clipSelected ? (
+        <ClipTools clipId={selection.id} />
+      ) : textSelected ? (
+        <TextTools textId={selection.id} />
+      ) : musicSelected ? (
+        <MusicTools />
+      ) : (
+        <MainTools />
+      )}
     </View>
   );
 }
@@ -90,6 +99,25 @@ function TextTools({ textId }: { textId: string }) {
         label="Delete"
         onPress={() => {
           apply((p) => removeOverlay(p, textId));
+          select(null);
+        }}
+      />
+      <View style={styles.slot} />
+    </>
+  );
+}
+
+function MusicTools() {
+  const { apply, select, setSheet } = useEditor();
+
+  return (
+    <>
+      <ToolButton icon="library_music" label="Change" onPress={() => setSheet('music')} />
+      <ToolButton
+        icon="delete"
+        label="Remove"
+        onPress={() => {
+          apply((p) => setSong(p, null));
           select(null);
         }}
       />

@@ -14,7 +14,7 @@ import { emptyProject, removeOverlay, updateOverlay, type OverlayPatch } from '@
 import { resolve, type ResolvedComposition } from '@/project/resolve';
 import type { Overlay, Project } from '@/project/types';
 
-export type Selection = { kind: 'clip'; id: string } | { kind: 'text'; id: string } | null;
+export type Selection = { kind: 'clip'; id: string } | { kind: 'text'; id: string } | { kind: 'music' } | null;
 export type Panel = 'filter' | 'text' | null;
 export type Sheet = 'music' | 'media' | null;
 
